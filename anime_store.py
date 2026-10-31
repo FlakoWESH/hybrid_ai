@@ -1,112 +1,155 @@
-"""anime.json 动漫语录的加载、迁移与匹配。
+"""语料库加载、迁移与匹配。
 
-anime.json 格式：{"关键词": ["回复1", "回复2", ...]}，
-共 177 个关键词、1500+ 条萌系互动回复。
+合并两份语料：
+- anime.json：自带萌系互动回复（摸/抱/亲...），与官方 ai 共用
+- qa.json：来自 yuzi-bot 的 15000+ 条问答语料（{name}/{me}/{segment} 占位符）
 
-设计要点：
-- 延迟加载：模块导入时不读文件，避免 anime.json 缺失导致整个插件加载失败
-  （旧版 ai 插件在模块顶层 json.load，文件缺失即崩溃）。
-- 容错：文件不存在 / JSON 解析失败时返回空字典，anime 分支静默跳过。
-- 首次启动迁移：插件自带一份 anime.json，移动到 DATA_PATH 下与官方 ai 共用。
+匹配算法（两阶段）：
+1. 子串过滤：`key in text`，快速缩小候选
+2. 相似度评分：在候选里用 difflib.quick_ratio() 取最高分那组
+   （长 key 占 text 比例更高，倾向选更精确的匹配）
+
+占位符替换：
+- {me}      → bot 自称（BotConfig.self_nickname）
+- {name}    → 用户昵称
+- {segment} → 换行
+- "你"      → 用户昵称（兼容旧 anime.json 语料）
 """
 
 from pathlib import Path
+import difflib
 import random
 import shutil
 
+from zhenxun.configs.config import BotConfig
 from zhenxun.configs.path_config import DATA_PATH
 from zhenxun.services.log import logger
 
-# 全局运行时数据文件位置（与官方 ai 插件保持一致）
 ANIME_FILE = DATA_PATH / "anime.json"
+QA_FILE = DATA_PATH / "qa.json"
 
 
-class AnimeStore:
-    """anime 语库，带惰性加载与缓存。"""
+def _json_load(file_obj):
+    try:
+        import ujson
+        return ujson.load(file_obj)
+    except Exception:
+        import json
+        return json.load(file_obj)
+
+
+class QaStore:
+    """合并语料库，带惰性加载与两阶段匹配。"""
 
     def __init__(self) -> None:
         self._data: dict[str, list[str]] | None = None
 
     def migrate_bundled(self, plugin_dir: Path) -> None:
-        """首次启动时把插件目录内自带的 anime.json 复制到 DATA_PATH。
-
-        仅当 DATA_PATH 下不存在时才复制，避免覆盖用户自定义语库。
-        用复制而非移动：插件目录被重装/覆盖时不至于丢掉自带语库。
-
-        参数:
-            plugin_dir: 插件根目录
-        """
-        src = plugin_dir / "anime.json"
-        if src.exists() and not ANIME_FILE.exists():
-            try:
-                ANIME_FILE.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(str(src), str(ANIME_FILE))
-                self._data = None
-                logger.info(f"anime.json 已复制到 {ANIME_FILE}", "hybrid_ai")
-            except Exception as e:
-                logger.error(f"anime.json 复制失败: {e}", "hybrid_ai", e=e)
+        """首次启动时把插件目录内的语料复制到 DATA_PATH（仅当目标不存在）。"""
+        for fname in ("anime.json", "qa.json"):
+            src = plugin_dir / fname
+            dst = DATA_PATH / fname
+            if src.exists() and not dst.exists():
+                try:
+                    dst.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(str(src), str(dst))
+                    self._data = None
+                    logger.info(f"{fname} 已复制到 {dst}", "hybrid_ai")
+                except Exception as e:
+                    logger.error(f"{fname} 复制失败: {e}", "hybrid_ai", e=e)
 
     def _load(self) -> dict[str, list[str]]:
-        """惰性加载并缓存 anime.json，失败返回空字典。"""
+        """惰性加载并合并两份语料，anime.json 优先级高于 qa.json。"""
         if self._data is not None:
             return self._data
 
-        if not ANIME_FILE.exists():
-            logger.warning(
-                f"anime.json 不存在于 {ANIME_FILE}，anime 语库将跳过", "hybrid_ai"
-            )
-            self._data = {}
-            return self._data
+        merged: dict[str, list[str]] = {}
 
-        try:
-            with ANIME_FILE.open("r", encoding="utf8") as f:
-                data = json_load(f)
-            if not isinstance(data, dict):
-                raise ValueError("anime.json 顶层结构不是对象")
-            self._data = data
-            logger.info(f"anime 语库加载完成，共 {len(data)} 个关键词", "hybrid_ai")
-        except Exception as e:
-            logger.error("加载 anime.json 失败，anime 语库将跳过", "hybrid_ai", e=e)
-            self._data = {}
+        # 先加载 qa.json（大语料，低优先级）
+        if QA_FILE.exists():
+            try:
+                with QA_FILE.open("r", encoding="utf8") as f:
+                    qa = _json_load(f)
+                if isinstance(qa, dict):
+                    merged.update(qa)
+            except Exception as e:
+                logger.error(f"加载 qa.json 失败: {e}", "hybrid_ai", e=e)
+
+        # 再加载 anime.json（萌系互动，覆盖同 key）
+        if ANIME_FILE.exists():
+            try:
+                with ANIME_FILE.open("r", encoding="utf8") as f:
+                    anime = _json_load(f)
+                if isinstance(anime, dict):
+                    for k, v in anime.items():
+                        if v:
+                            merged[k] = v
+            except Exception as e:
+                logger.error(f"加载 anime.json 失败: {e}", "hybrid_ai", e=e)
+
+        self._data = merged
+        if merged:
+            logger.info(
+                f"语料库加载完成，共 {len(merged)} 个关键词、"
+                f"{sum(len(v) for v in merged.values())} 条回复",
+                "hybrid_ai",
+            )
+        else:
+            logger.warning("语料库为空，短消息语料分支将跳过", "hybrid_ai")
         return self._data
 
-    def match(self, text: str, nickname: str) -> str | None:
-        """按子串匹配关键词，命中则随机返回一条回复。
+    def _build_reply(self, reply: str, nickname: str) -> str:
+        """替换占位符。"""
+        me = BotConfig.self_nickname or "小真寻"
+        text = reply
+        text = text.replace("{me}", me)
+        text = text.replace("{name}", nickname or "你")
+        text = text.replace("{segment}", "\n")
+        # 兼容旧 anime.json 里直接写"你"的语料
+        if nickname:
+            text = text.replace("你", nickname)
+        return text
 
-        与官方 ai 行为一致：`key in text` 即命中，单字/多字不做区分。
-        回复中的"你"替换为用户昵称。
+    def match(self, text: str, nickname: str) -> str | None:
+        """两阶段匹配：子串过滤 + 相似度评分，命中则随机返回一条回复。
 
         参数:
             text: 用户消息纯文本
             nickname: 发送者昵称
 
         返回:
-            命中返回回复字符串，未命中返回 None
+            命中返回替换占位符后的回复字符串，未命中返回 None
         """
         data = self._load()
         if not text or not data:
             return None
 
+        # 清理：去掉 bot 自称后再算相似度（避免 bot 名干扰评分）
+        me = BotConfig.self_nickname or ""
+        cleaned = text.replace(me, "") if me else text
+
+        # 阶段1：子串过滤出候选，阶段2：对候选算相似度
+        best_score = -1.0
+        best_replies: list[str] | None = None
+
         for key, replies in data.items():
-            if key and key in text and replies:
-                reply = random.choice(replies)
-                if nickname:
-                    reply = reply.replace("你", nickname)
-                return reply
+            if not key or not replies or key not in text:
+                continue
+            score = difflib.SequenceMatcher(None, key, cleaned).quick_ratio()
+            if score > best_score:
+                best_score = score
+                best_replies = replies
+            elif score == best_score and best_replies is not None:
+                # 同分合并候选
+                best_replies = best_replies + replies
+
+        if best_replies:
+            reply = random.choice(best_replies)
+            return self._build_reply(reply, nickname)
         return None
 
 
-def json_load(file_obj):
-    """读取 JSON，优先用 ujson 以保持与官方插件一致。"""
-    try:
-        import ujson
-
-        return ujson.load(file_obj)
-    except Exception:
-        import json
-
-        return json.load(file_obj)
-
-
 # 全局单例
-anime_store = AnimeStore()
+qa_store = QaStore()
+# 向后兼容别名
+anime_store = qa_store
