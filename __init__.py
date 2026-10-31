@@ -24,6 +24,7 @@ from zhenxun.services.log import logger
 from zhenxun.utils.common_utils import CommonUtils
 from zhenxun.utils.depends import UserName
 from zhenxun.utils.enum import PluginType
+from zhenxun.utils.rules import ensure_group
 
 from .anime_store import anime_store
 from .data_source import route_message
@@ -169,11 +170,6 @@ __plugin_meta__ = PluginMetadata(
 )
 
 
-async def group_only(session: Uninfo) -> bool:
-    """群聊限定规则：只有在群组中才放行（私聊 session.group 为 None）。"""
-    return session.group is not None
-
-
 async def not_blocked(session: Uninfo) -> bool:
     """被动技能未在全局/本群被禁用时才放行。
 
@@ -184,9 +180,9 @@ async def not_blocked(session: Uninfo) -> bool:
     return not await CommonUtils.task_is_block(session, "hybrid_ai", group_id)
 
 
-# 仅群聊 + 被 @ + 未被禁用；block=True 防止与其他同优先级 AI 插件重复响应
+# 仅群聊（ensure_group）+ 被 @ + 未被禁用；block=True 防止与其他同优先级 AI 插件重复响应
 hybrid_ai = on_message(
-    rule=to_me() & group_only & not_blocked, priority=998, block=True
+    rule=to_me() & ensure_group & not_blocked, priority=998, block=True
 )
 
 
