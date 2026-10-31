@@ -71,14 +71,9 @@ class AnimeStore:
         return self._data
 
     def match(self, text: str, nickname: str) -> str | None:
-        """匹配关键词，命中则随机返回一条回复。
+        """按子串匹配关键词，命中则随机返回一条回复。
 
-        匹配规则：
-        - 多字关键词：子串命中即算（与官方 ai 的 text.find(key) != -1 一致）。
-        - 单字关键词：要求整句完全等于该字。anime.json 里有 60+ 个单字
-          （摸/抱/亲/吃/看/是/手 等），若按子串匹配，"你是"、"看看"
-          这类日常消息会被高频误触发。
-
+        与官方 ai 行为一致：`key in text` 即命中，单字/多字不做区分。
         回复中的"你"替换为用户昵称。
 
         参数:
@@ -93,17 +88,11 @@ class AnimeStore:
             return None
 
         for key, replies in data.items():
-            if not key or not replies:
-                continue
-            if len(key) == 1:
-                if text != key:
-                    continue
-            elif key not in text:
-                continue
-            reply = random.choice(replies)
-            if nickname:
-                reply = reply.replace("你", nickname)
-            return reply
+            if key and key in text and replies:
+                reply = random.choice(replies)
+                if nickname:
+                    reply = reply.replace("你", nickname)
+                return reply
         return None
 
 
