@@ -19,11 +19,9 @@ from nonebot_plugin_alconna import UniMsg
 from nonebot_plugin_alconna.uniseg import Image
 from nonebot_plugin_uninfo import Uninfo
 
-from zhenxun.configs.utils import PluginExtraData, RegisterConfig, Task
+from zhenxun.configs.utils import PluginExtraData, RegisterConfig
 from zhenxun.services.log import logger
-from zhenxun.utils.common_utils import CommonUtils
 from zhenxun.utils.depends import UserName
-from zhenxun.utils.enum import PluginType
 from zhenxun.utils.rules import ensure_group
 
 from .anime_store import anime_store
@@ -36,10 +34,8 @@ __plugin_meta__ = PluginMetadata(
     extra=PluginExtraData(
         author="you",
         version="0.1.0",
-        plugin_type=PluginType.DEPENDANT,
         ignore_prompt=True,
         menu_type="其他",
-        tasks=[Task(module="hybrid_ai", name="缝合AI")],
         configs=[
             RegisterConfig(
                 key="HYBRID_AI_CHAT_MODEL",
@@ -170,20 +166,8 @@ __plugin_meta__ = PluginMetadata(
 )
 
 
-async def not_blocked(session: Uninfo) -> bool:
-    """被动技能未在全局/本群被禁用时才放行。
-
-    CommonUtils.task_is_block 只有拿到 nonebot_plugin_session 的 Session
-    时才会自己推导 group_id，Uninfo 不会，因此这里显式传入群号。
-    """
-    group_id = session.group.id if session.group else None
-    return not await CommonUtils.task_is_block(session, "hybrid_ai", group_id)
-
-
-# 仅群聊（ensure_group）+ 被 @ + 未被禁用；block=True 防止与其他同优先级 AI 插件重复响应
-hybrid_ai = on_message(
-    rule=to_me() & ensure_group & not_blocked, priority=998, block=True
-)
+# 仅群聊（ensure_group）+ 被 @；block=True 防止与其他同优先级 AI 插件重复响应
+hybrid_ai = on_message(rule=to_me() & ensure_group, priority=998, block=True)
 
 
 @hybrid_ai.handle()
