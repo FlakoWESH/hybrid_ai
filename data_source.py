@@ -16,6 +16,7 @@
 
 import os
 import random
+from pathlib import Path
 
 from nonebot_plugin_alconna.uniseg import Image
 
@@ -98,6 +99,25 @@ def _random_image(subdir: str):
         return None
 
 
+# 插件自带表情图目录（来自 yuzi-bot/statics/face，313 张）
+_FACE_DIR = Path(__file__).parent / "face"
+
+
+def _random_face():
+    """从插件自带 face/ 目录随机选一张表情图。"""
+    try:
+        files = [
+            f
+            for f in os.listdir(_FACE_DIR)
+            if f.lower().endswith((".png", ".jpg", ".jpeg", ".gif", ".webp"))
+        ]
+        if not files:
+            return None
+        return _FACE_DIR / random.choice(files)
+    except Exception:
+        return None
+
+
 def hello():
     """打招呼语库：随机文案 + 随机"在"图片。"""
     text = random.choice(_HELLO_TEXTS)
@@ -122,6 +142,15 @@ def _build_text(text: str):
     固定语库 hello()/no_result() 不含敏感词，不走此函数。
     """
     filtered = apply_global_text_filter(text, get_config("TEXT_FILTER", []) or [])
+    return MessageUtils.build_message(filtered)
+
+
+def _build_text_with_face(text: str):
+    """语料回复：过 TEXT_FILTER 后，随机附一张表情图。"""
+    filtered = apply_global_text_filter(text, get_config("TEXT_FILTER", []) or [])
+    img = _random_face()
+    if img:
+        return MessageUtils.build_message([img, filtered])
     return MessageUtils.build_message(filtered)
 
 
@@ -250,13 +279,13 @@ async def route_message(
     if len(text) < threshold:
         # 含疑问词的短消息直接走 LLM（"人生意义"、"猫呢"等）
         if not contains_question(text):
-            # 4.1 anime 语库概率门控
-            anime_prob = get_config("ANIME_PROBABILITY", 0.7)
+            # 4.1 语料库概率门控
+            anime_prob = get_config("ANIME_PROBABILITY", 0.85)
             if random.random() < anime_prob:
                 anime_reply = anime_store.match(text, nickname)
                 if anime_reply:
                     _record_result(user_id, anime_reply)
-                    return _build_text(anime_reply)
+                    return _build_text_with_face(anime_reply)
 
             # 4.2 青云客概率门控（内部再受黑名单 + 限流约束）
             qyk_prob = get_config("QYK_PROBABILITY", 0.3)

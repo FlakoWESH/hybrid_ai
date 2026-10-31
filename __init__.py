@@ -55,9 +55,9 @@ __plugin_meta__ = PluginMetadata(
             ),
             RegisterConfig(
                 key="ANIME_PROBABILITY",
-                value=0.7,
-                help="短消息触发 anime 语库匹配的概率(0.0~1.0)",
-                default_value=0.7,
+                value=0.85,
+                help="短消息触发语料库匹配的概率(0.0~1.0)",
+                default_value=0.85,
                 type=float,
             ),
             RegisterConfig(

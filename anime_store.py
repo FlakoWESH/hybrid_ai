@@ -124,6 +124,11 @@ class QaStore:
         if not text or not data:
             return None
 
+        # 硬编码黑名单：含这些词的消息不走进语料（避让其他插件功能）
+        ban_words = ["小故事", "变身"]
+        if any(bw in text for bw in ban_words):
+            return None
+
         # 清理：去掉 bot 自称后再算相似度（避免 bot 名干扰评分）
         me = BotConfig.self_nickname or ""
         cleaned = text.replace(me, "") if me else text
