@@ -125,10 +125,7 @@ class QykClient:
             decorated = "~".join(nickname) + "~"
             if random.random() < 0.2 and "大人" not in decorated:
                 decorated += "大~人~"
-        return (
-            text.replace("小主人", decorated)
-            .replace("小朋友", decorated)
-        )
+        return text.replace("小主人", decorated).replace("小朋友", decorated)
 
 
 qyk_client = QykClient()

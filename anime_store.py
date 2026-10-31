@@ -10,9 +10,9 @@ anime.json 格式：{"关键词": ["回复1", "回复2", ...]}，
 - 首次启动迁移：插件自带一份 anime.json，移动到 DATA_PATH 下与官方 ai 共用。
 """
 
+from pathlib import Path
 import random
 import shutil
-from pathlib import Path
 
 from zhenxun.configs.path_config import DATA_PATH
 from zhenxun.services.log import logger
@@ -28,9 +28,10 @@ class AnimeStore:
         self._data: dict[str, list[str]] | None = None
 
     def migrate_bundled(self, plugin_dir: Path) -> None:
-        """首次启动时把插件目录内自带的 anime.json 迁移到 DATA_PATH。
+        """首次启动时把插件目录内自带的 anime.json 复制到 DATA_PATH。
 
-        仅当 DATA_PATH 下不存在时才移动，避免覆盖用户自定义语库。
+        仅当 DATA_PATH 下不存在时才复制，避免覆盖用户自定义语库。
+        用复制而非移动：插件目录被重装/覆盖时不至于丢掉自带语库。
 
         参数:
             plugin_dir: 插件根目录
@@ -39,10 +40,11 @@ class AnimeStore:
         if src.exists() and not ANIME_FILE.exists():
             try:
                 ANIME_FILE.parent.mkdir(parents=True, exist_ok=True)
-                shutil.move(str(src), str(ANIME_FILE))
-                logger.info(f"anime.json 已移动到 {ANIME_FILE}", "hybrid_ai")
+                shutil.copy2(str(src), str(ANIME_FILE))
+                self._data = None
+                logger.info(f"anime.json 已复制到 {ANIME_FILE}", "hybrid_ai")
             except Exception as e:
-                logger.error(f"anime.json 移动失败: {e}", "hybrid_ai", e=e)
+                logger.error(f"anime.json 复制失败: {e}", "hybrid_ai", e=e)
 
     def _load(self) -> dict[str, list[str]]:
         """惰性加载并缓存 anime.json，失败返回空字典。"""
@@ -50,7 +52,9 @@ class AnimeStore:
             return self._data
 
         if not ANIME_FILE.exists():
-            logger.warning(f"anime.json 不存在于 {ANIME_FILE}，anime 语库将跳过", "hybrid_ai")
+            logger.warning(
+                f"anime.json 不存在于 {ANIME_FILE}，anime 语库将跳过", "hybrid_ai"
+            )
             self._data = {}
             return self._data
 
@@ -67,9 +71,14 @@ class AnimeStore:
         return self._data
 
     def match(self, text: str, nickname: str) -> str | None:
-        """按子串匹配关键词，命中则随机返回一条回复。
+        """匹配关键词，命中则随机返回一条回复。
 
-        与官方 ai 行为一致：text.find(key) != -1 即命中；
+        匹配规则：
+        - 多字关键词：子串命中即算（与官方 ai 的 text.find(key) != -1 一致）。
+        - 单字关键词：要求整句完全等于该字。anime.json 里有 60+ 个单字
+          （摸/抱/亲/吃/看/是/手 等），若按子串匹配，"你是"、"看看"
+          这类日常消息会被高频误触发。
+
         回复中的"你"替换为用户昵称。
 
         参数:
@@ -84,11 +93,17 @@ class AnimeStore:
             return None
 
         for key, replies in data.items():
-            if key and key in text and replies:
-                reply = random.choice(replies)
-                if nickname:
-                    reply = reply.replace("你", nickname)
-                return reply
+            if not key or not replies:
+                continue
+            if len(key) == 1:
+                if text != key:
+                    continue
+            elif key not in text:
+                continue
+            reply = random.choice(replies)
+            if nickname:
+                reply = reply.replace("你", nickname)
+            return reply
         return None
 
 

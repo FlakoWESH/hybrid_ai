@@ -18,9 +18,12 @@ from nonebot.rule import to_me
 from nonebot_plugin_alconna import UniMsg
 from nonebot_plugin_alconna.uniseg import Image
 from nonebot_plugin_uninfo import Uninfo
-from zhenxun.configs.utils import PluginExtraData, RegisterConfig
+
+from zhenxun.configs.utils import PluginExtraData, RegisterConfig, Task
 from zhenxun.services.log import logger
+from zhenxun.utils.common_utils import CommonUtils
 from zhenxun.utils.depends import UserName
+from zhenxun.utils.enum import PluginType
 
 from .anime_store import anime_store
 from .data_source import route_message
@@ -28,17 +31,22 @@ from .data_source import route_message
 __plugin_meta__ = PluginMetadata(
     name="hybrid_ai",
     description="语库+青云客+LLM缝合AI（仅群聊，短消息走语库，长消息走大模型）",
-    usage=f"在群聊中 @ 机器人 即可触发；私聊不回应。",
+    usage="在群聊中 @ 机器人 即可触发；私聊不回应。",
     extra=PluginExtraData(
         author="you",
         version="0.1.0",
+        plugin_type=PluginType.DEPENDANT,
         ignore_prompt=True,
-        menu_type="群聊",
+        menu_type="其他",
+        tasks=[Task(module="hybrid_ai", name="缝合AI")],
         configs=[
             RegisterConfig(
                 key="HYBRID_AI_CHAT_MODEL",
                 value=None,
-                help="LLM 模型名，留空则使用 zhenxun 全局默认 chat 模型（与 bym_ai 共用同一套 AI 配置）；填写则覆盖为指定模型",
+                help=(
+                    "LLM 模型名，留空则使用 zhenxun 全局默认 chat 模型"
+                    "（与 bym_ai 共用同一套 AI 配置）；填写则覆盖为指定模型"
+                ),
                 default_value=None,
             ),
             RegisterConfig(
@@ -93,13 +101,31 @@ __plugin_meta__ = PluginMetadata(
             RegisterConfig(
                 key="QYK_BLOCK_KEYWORDS",
                 value=[
-                    "笑话", "天气", "翻译", "歌词", "成语",
-                    "归属", "计算", "五笔", "拼音", "ip", "IP",
+                    "笑话",
+                    "天气",
+                    "翻译",
+                    "歌词",
+                    "成语",
+                    "归属",
+                    "计算",
+                    "五笔",
+                    "拼音",
+                    "ip",
+                    "IP",
                 ],
                 help="不交给青云客处理的关键词（这些功能实测质量差或报错）",
                 default_value=[
-                    "笑话", "天气", "翻译", "歌词", "成语",
-                    "归属", "计算", "五笔", "拼音", "ip", "IP",
+                    "笑话",
+                    "天气",
+                    "翻译",
+                    "歌词",
+                    "成语",
+                    "归属",
+                    "计算",
+                    "五笔",
+                    "拼音",
+                    "ip",
+                    "IP",
                 ],
                 type=list[str],
             ),
@@ -148,8 +174,20 @@ async def group_only(session: Uninfo) -> bool:
     return session.group is not None
 
 
-# 仅群聊 + 被 @；block=True 防止与其他同优先级 AI 插件重复响应
-hybrid_ai = on_message(rule=to_me() & group_only, priority=998, block=True)
+async def not_blocked(session: Uninfo) -> bool:
+    """被动技能未在全局/本群被禁用时才放行。
+
+    CommonUtils.task_is_block 只有拿到 nonebot_plugin_session 的 Session
+    时才会自己推导 group_id，Uninfo 不会，因此这里显式传入群号。
+    """
+    group_id = session.group.id if session.group else None
+    return not await CommonUtils.task_is_block(session, "hybrid_ai", group_id)
+
+
+# 仅群聊 + 被 @ + 未被禁用；block=True 防止与其他同优先级 AI 插件重复响应
+hybrid_ai = on_message(
+    rule=to_me() & group_only & not_blocked, priority=998, block=True
+)
 
 
 @hybrid_ai.handle()

@@ -18,6 +18,7 @@ import os
 import random
 
 from nonebot_plugin_alconna.uniseg import Image
+
 from zhenxun.configs.config import BotConfig
 from zhenxun.configs.path_config import IMAGE_PATH
 from zhenxun.services.ai.llm import LLMException, chat
@@ -27,9 +28,9 @@ from zhenxun.utils.message import MessageUtils
 from .anime_store import anime_store
 from .config import get_config
 from .content_filter import apply_global_text_filter
-from .qyk_client import qyk_client
 from .message_manager import ai_message_manager
 from .persona import build_persona
+from .qyk_client import qyk_client
 
 # 打招呼触发词（与官方 ai 一致）
 GREETING_WORDS = (
@@ -44,8 +45,21 @@ GREETING_WORDS = (
 
 # 短消息中的疑问词：命中即视为真正提问，直接走 LLM，不进入 anime/青云客
 QUESTION_WORDS = (
-    "吗", "呢", "怎么", "什么", "为什么", "如何", "为何",
-    "哪", "谁", "几", "多少", "咋", "是不是", "？", "?",
+    "吗",
+    "呢",
+    "怎么",
+    "什么",
+    "为什么",
+    "如何",
+    "为何",
+    "哪",
+    "谁",
+    "几",
+    "多少",
+    "咋",
+    "是不是",
+    "？",
+    "?",
 )
 
 _HELLO_TEXTS = (
@@ -72,9 +86,11 @@ def _random_image(subdir: str):
     """
     directory = IMAGE_PATH / subdir
     try:
-        files = [f for f in os.listdir(directory) if f.lower().endswith(
-            (".png", ".jpg", ".jpeg", ".gif", ".webp")
-        )]
+        files = [
+            f
+            for f in os.listdir(directory)
+            if f.lower().endswith((".png", ".jpg", ".jpeg", ".gif", ".webp"))
+        ]
         if not files:
             return None
         return directory / random.choice(files)

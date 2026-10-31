@@ -11,8 +11,7 @@
 
 from zhenxun.configs.config import Config
 
-# 模块级配置对象，插件内统一从此读取
-base_config = Config.get("hybrid_ai")
+_MODULE = "hybrid_ai"
 
 # 与 __init__.py 中 RegisterConfig 的 value/default_value 保持一致。
 # 存在的意义：zhenxun 的 init_config 在完整启动时才会把插件配置写入
@@ -28,11 +27,27 @@ _DEFAULTS = {
     "QYK_TIMEOUT": 8,
     "LLM_TIMEOUT": 30,
     "QYK_BLOCK_KEYWORDS": [
-        "笑话", "天气", "翻译", "歌词", "成语",
-        "归属", "计算", "五笔", "拼音", "ip", "IP",
+        "笑话",
+        "天气",
+        "翻译",
+        "歌词",
+        "成语",
+        "归属",
+        "计算",
+        "五笔",
+        "拼音",
+        "ip",
+        "IP",
     ],
     "QYK_SWEAR_FILTER": [
-        "滚", "去死", "笨蛋", "废物", "色", "屁", "猪", "垃圾",
+        "滚",
+        "去死",
+        "笨蛋",
+        "废物",
+        "色",
+        "屁",
+        "猪",
+        "垃圾",
     ],
     "TEXT_FILTER": ["鸡", "口交"],
     "REPEAT_BAN_ENABLED": True,
@@ -46,11 +61,15 @@ def get_config(key: str, default=None):
 
     优先级：显式传入的 default > zhenxun 配置文件中的值 > 本地 _DEFAULTS。
 
+    每次调用都重新 Config.get(_MODULE)：Config.reload() / load_data() 会
+    重建 ConfigGroup 实例，模块级缓存的 ConfigGroup 在热重载后会变成过期
+    引用，读不到后台新改的配置。
+
     封装一层是为了在配置尚未生成 / 类型异常时兜底，
     避免 None.get 之类的错误在运行时炸掉整个处理器。
     """
     try:
-        val = base_config.get(key, default=None)
+        val = Config.get(_MODULE).get(key, default=None)
     except Exception:
         val = None
     if val is not None:
