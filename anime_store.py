@@ -25,6 +25,8 @@ from zhenxun.configs.config import BotConfig
 from zhenxun.configs.path_config import DATA_PATH
 from zhenxun.services.log import logger
 
+from .config import get_config
+
 ANIME_FILE = DATA_PATH / "anime.json"
 QA_FILE = DATA_PATH / "qa.json"
 
@@ -122,6 +124,11 @@ class QaStore:
         """
         data = self._load()
         if not text or not data:
+            return None
+
+        # 配置项黑名单：含任意词则不走进语料（默认空列表，不做任何拦截）
+        ban_words = get_config("QA_BAN_WORDS", []) or []
+        if any(bw in text for bw in ban_words):
             return None
 
         # 清理：去掉 bot 自称后再算相似度（避免 bot 名干扰评分）

@@ -21,6 +21,7 @@ _DEFAULTS = {
     "HYBRID_AI_CHAT_MODEL": None,  # None = 联动 zhenxun 全局默认 chat 模型
     "SHORT_MSG_THRESHOLD": 6,
     "ANIME_PROBABILITY": 0.85,
+    "QA_BAN_WORDS": [],
     "QYK_PROBABILITY": 0.3,
     "QYK_RATE_LIMIT": 100,
     "QYK_WINDOW_SECONDS": 600,

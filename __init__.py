@@ -61,6 +61,13 @@ __plugin_meta__ = PluginMetadata(
                 type=float,
             ),
             RegisterConfig(
+                key="QA_BAN_WORDS",
+                value=[],
+                help="语料库黑名单：消息含列表中任意词时不走进语料（默认空）",
+                default_value=[],
+                type=list[str],
+            ),
+            RegisterConfig(
                 key="QYK_PROBABILITY",
                 value=0.3,
                 help="anime 未命中后走青云客的概率(0.0~1.0)",
