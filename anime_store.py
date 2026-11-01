@@ -142,7 +142,7 @@ class QaStore:
         for key, replies in data.items():
             if not key or not replies or key not in text:
                 continue
-            score = difflib.SequenceMatcher(None, key, cleaned).quick_ratio()
+            score = difflib.SequenceMatcher(None, key, cleaned).ratio()
             if score > best_score:
                 best_score = score
                 best_replies = replies
